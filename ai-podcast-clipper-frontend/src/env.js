@@ -21,12 +21,15 @@ export const env = createEnv({
     S3_BUCKET_NAME: z.string(),
     PROCESS_VIDEO_ENDPOINT: z.string(),
     PROCESS_VIDEO_ENDPOINT_AUTH: z.string(),
-    STRIPE_SECRET_KEY: z.string(),
-    STRIPE_SMALL_CREDIT_PACK: z.string(),
-    STRIPE_MEDIUM_CREDIT_PACK: z.string(),
-    STRIPE_LARGE_CREDIT_PACK: z.string(),
     BASE_URL: z.string(),
-    STRIPE_WEBHOOK_SECRET: z.string(),
+    // MPESA Configuration
+    MPESA_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
+    MPESA_BUSINESS_SHORTCODE: z.string(),
+    MPESA_PASSKEY: z.string(),
+    MPESA_CONSUMER_KEY: z.string(),
+    MPESA_CONSUMER_SECRET: z.string(),
+    MPESA_CALLBACK_URL: z.string().url(),
+    MPESA_TIMEOUT_URL: z.string().url(),
   },
 
   /**
@@ -35,8 +38,7 @@ export const env = createEnv({
    * `NEXT_PUBLIC_`.
    */
   client: {
-    // NEXT_PUBLIC_CLIENTVAR: z.string(),
-    NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: z.string(),
+    // No client-side environment variables needed
   },
 
   /**
@@ -53,14 +55,15 @@ export const env = createEnv({
     S3_BUCKET_NAME: process.env.S3_BUCKET_NAME,
     PROCESS_VIDEO_ENDPOINT: process.env.PROCESS_VIDEO_ENDPOINT,
     PROCESS_VIDEO_ENDPOINT_AUTH: process.env.PROCESS_VIDEO_ENDPOINT_AUTH,
-    NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:
-      process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY,
-    STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
-    STRIPE_SMALL_CREDIT_PACK: process.env.STRIPE_SMALL_CREDIT_PACK,
-    STRIPE_MEDIUM_CREDIT_PACK: process.env.STRIPE_MEDIUM_CREDIT_PACK,
-    STRIPE_LARGE_CREDIT_PACK: process.env.STRIPE_LARGE_CREDIT_PACK,
     BASE_URL: process.env.BASE_URL,
-    STRIPE_WEBHOOK_SECRET: process.env.STRIPE_WEBHOOK_SECRET,
+    // MPESA Configuration
+    MPESA_ENV: process.env.MPESA_ENV,
+    MPESA_BUSINESS_SHORTCODE: process.env.MPESA_BUSINESS_SHORTCODE,
+    MPESA_PASSKEY: process.env.MPESA_PASSKEY,
+    MPESA_CONSUMER_KEY: process.env.MPESA_CONSUMER_KEY,
+    MPESA_CONSUMER_SECRET: process.env.MPESA_CONSUMER_SECRET,
+    MPESA_CALLBACK_URL: process.env.MPESA_CALLBACK_URL,
+    MPESA_TIMEOUT_URL: process.env.MPESA_TIMEOUT_URL,
   },
   /**
    * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially

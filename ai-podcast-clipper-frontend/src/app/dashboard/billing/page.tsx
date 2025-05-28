@@ -3,7 +3,7 @@
 import type { VariantProps } from "class-variance-authority";
 import { ArrowLeftIcon, CheckIcon } from "lucide-react";
 import Link from "next/link";
-import { createCheckoutSession, type PriceId } from "~/actions/stripe";
+import { initiateMpesaPayment, type CreditPack } from "~/actions/mpesa";
 import { Button, buttonVariants } from "~/components/ui/button";
 import {
   Card,
@@ -14,6 +14,7 @@ import {
   CardTitle,
 } from "~/components/ui/card";
 import { cn } from "~/lib/utils";
+import { toast } from "sonner";
 
 interface PricingPlan {
   title: string;
@@ -24,44 +25,57 @@ interface PricingPlan {
   buttonVariant: VariantProps<typeof buttonVariants>["variant"];
   isPopular?: boolean;
   savePercentage?: string;
-  priceId: PriceId;
+  creditPack: CreditPack;
 }
 
 const plans: PricingPlan[] = [
   {
     title: "Small Pack",
-    price: "$9.99",
+    price: "KES 999",
     description: "Perfect for occasional podcast creators",
     features: ["50 credits", "No expiration", "Download all clips"],
     buttonText: "Buy 50 credits",
     buttonVariant: "outline",
-    priceId: "small",
+    creditPack: "small",
   },
   {
     title: "Medium Pack",
-    price: "$24.99",
+    price: "KES 2,499",
     description: "Best value for regular podcasters",
     features: ["150 credits", "No expiration", "Download all clips"],
     buttonText: "Buy 150 credits",
     buttonVariant: "default",
     isPopular: true,
     savePercentage: "Save 17%",
-    priceId: "medium",
+    creditPack: "medium",
   },
   {
     title: "Large Pack",
-    price: "$69.99",
-    description: "Ideal for podcast studioes and agencies",
+    price: "KES 6,999",
+    description: "Ideal for podcast studios and agencies",
     features: ["500 credits", "No expiration", "Download all clips"],
     buttonText: "Buy 500 credits",
     buttonVariant: "outline",
     isPopular: false,
     savePercentage: "Save 30%",
-    priceId: "large",
+    creditPack: "large",
   },
 ];
 
 function PricingCard({ plan }: { plan: PricingPlan }) {
+  const handlePayment = async () => {
+    try {
+      const result = await initiateMpesaPayment(plan.creditPack);
+      if (result.success) {
+        toast.success(result.message);
+      } else {
+        toast.error(result.error ?? "Payment failed");
+      }
+    } catch (error) {
+      toast.error("Failed to initiate payment");
+    }
+  };
+
   return (
     <Card
       className={cn(
@@ -95,14 +109,13 @@ function PricingCard({ plan }: { plan: PricingPlan }) {
         </ul>
       </CardContent>
       <CardFooter>
-        <form
-          action={() => createCheckoutSession(plan.priceId)}
+        <Button
+          variant={plan.buttonVariant}
           className="w-full"
+          onClick={handlePayment}
         >
-          <Button variant={plan.buttonVariant} className="w-full" type="submit">
-            {plan.buttonText}
-          </Button>
-        </form>
+          {plan.buttonText}
+        </Button>
       </CardFooter>
     </Card>
   );
@@ -127,7 +140,7 @@ export default function BillingPage() {
             Buy Credits
           </h1>
           <p className="text-muted-foreground">
-            Purchase credits to generate more podcast clips. The more credtis
+            Purchase credits to generate more podcast clips. The more credits
             you buy, the better the value.
           </p>
         </div>

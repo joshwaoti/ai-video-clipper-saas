@@ -1,4 +1,5 @@
 "use client"
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
 
 import * as React from "react"
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu"

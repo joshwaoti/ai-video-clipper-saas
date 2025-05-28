@@ -301,13 +301,15 @@ def process_clip(base_dir: str, original_video_path: str, s3_key: str, start_tim
 
     s3_client = boto3.client("s3")
     s3_client.upload_file(
-        subtitle_output_path, "josh-video-clipper", output_s3_key)
+        subtitle_output_path, "ai-podcast-clipper", output_s3_key)
 
 
 @app.cls(gpu="L40S", timeout=900, retries=0, scaledown_window=20, secrets=[modal.Secret.from_name("ai-podcast-clipper-secret")], volumes={mount_path: volume})
 class AiPodcastClipper:
     @modal.enter()
     def load_model(self):
+        print("Loading models")
+
         self.whisperx_model = whisperx.load_model(
             "large-v2", device="cuda", compute_type="float16")
 
@@ -345,8 +347,6 @@ class AiPodcastClipper:
 
         duration = time.time() - start_time
         print("Transcription and alignment took " + str(duration) + " seconds")
-        
-        
 
         segments = []
 
@@ -387,8 +387,6 @@ class AiPodcastClipper:
 
     @modal.fastapi_endpoint(method="POST")
     def process_video(self, request: ProcessVideoRequest, token: HTTPAuthorizationCredentials = Depends(auth_scheme)):
-        print("Processing video...")
-        
         s3_key = request.s3_key
 
         if token.credentials != os.environ["AUTH_TOKEN"]:
@@ -402,10 +400,7 @@ class AiPodcastClipper:
         # Download video file
         video_path = base_dir / "input.mp4"
         s3_client = boto3.client("s3")
-        s3_client.download_file("josh-video-clipper", s3_key, str(video_path))
-        
-        # self.transcribe_video(base_dir, video_path)
-        
+        s3_client.download_file("ai-podcast-clipper", s3_key, str(video_path))
 
         # 1. Transcription
         transcript_segments_json = self.transcribe_video(base_dir, video_path)
@@ -429,7 +424,7 @@ class AiPodcastClipper:
         print(clip_moments)
 
         # 3. Process clips
-        for index, moment in enumerate(clip_moments[:3]):
+        for index, moment in enumerate(clip_moments[:5]):
             if "start" in moment and "end" in moment:
                 print("Processing clip" + str(index) + " from " +
                       str(moment["start"]) + " to " + str(moment["end"]))
@@ -450,7 +445,7 @@ def main():
     url = ai_podcast_clipper.process_video.web_url
 
     payload = {
-        "s3_key": "test1/mi65min.mp4"
+        "s3_key": "test2/mi630min.mp4"
     }
 
     headers = {
