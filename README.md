@@ -100,6 +100,8 @@ Run:
 npm run dev
 ```
 
+Before running the frontend, ensure you have created a `.env` file by copying `.env.example`. Populate this file with your specific credentials and configurations, especially for services like NextAuth, Prisma, AWS S3, and payment gateways such as MPESA. Refer to `/src/env.js` for the schema and `mpesaConfig.ts` for MPESA related variables.
+
 ### Queue
 
 Run the local queue development server with Inngest:
