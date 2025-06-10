@@ -37,6 +37,12 @@ export default async function DashboardPage() {
           createdAt: "desc",
         },
       },
+      // phoneNumber: true, // Removed as it's no longer needed by DashboardClient for MPESA modal
+      credits: {
+        select: {
+          amount: true,
+        },
+      },
     },
   });
 
@@ -50,6 +56,11 @@ export default async function DashboardPage() {
   }));
 
   return (
-    <DashboardClient uploadedFiles={formattedFiles} clips={userData.clips} />
+    <DashboardClient
+      uploadedFiles={formattedFiles}
+      clips={userData.clips}
+      // userPhoneNumber prop removed
+      userCredits={userData.credits?.amount ?? 0}
+    />
   );
 }

@@ -14,6 +14,8 @@ import {
 } from "./ui/card";
 import { Loader2, UploadCloud } from "lucide-react";
 import { useState } from "react";
+// Dialog related imports removed: Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger
+// MpesaCheckoutForm import removed
 import { generateUploadUrl } from "~/actions/s3";
 import { toast } from "sonner";
 import { processVideo } from "~/actions/generation";
@@ -42,10 +44,13 @@ export function DashboardClient({
     createdAt: Date;
   }[];
   clips: Clip[];
+  // userPhoneNumber prop removed
+  userCredits: number | null | undefined;
 }) {
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  // isMpesaModalOpen state removed
   const router = useRouter();
 
   const handleRefresh = async () => {
@@ -113,9 +118,15 @@ export function DashboardClient({
             Upload your podcast and get AI-generated clips instantly
           </p>
         </div>
-        <Link href="/dashboard/billing">
-          <Button>Buy Credits</Button>
-        </Link>
+        <div className="flex items-center space-x-4">
+          <div>
+            <p className="text-right text-sm text-muted-foreground">Credits</p>
+            <p className="text-right text-lg font-semibold">{userCredits ?? 0}</p>
+          </div>
+          <Link href="/dashboard/billing">
+            <Button>Buy Credits</Button>
+          </Link>
+        </div>
       </div>
 
       <Tabs defaultValue="upload">
