@@ -14,16 +14,8 @@ import {
 } from "./ui/card";
 import { Loader2, UploadCloud } from "lucide-react";
 import { useState } from "react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "./ui/dialog";
-import { MpesaCheckoutForm } from "./mpesa-checkout-form";
+// Dialog related imports removed: Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger
+// MpesaCheckoutForm import removed
 import { generateUploadUrl } from "~/actions/s3";
 import { toast } from "sonner";
 import { processVideo } from "~/actions/generation";
@@ -52,13 +44,13 @@ export function DashboardClient({
     createdAt: Date;
   }[];
   clips: Clip[];
-  userPhoneNumber: string | null | undefined;
-  userCredits: number | null | undefined; // Added userCredits
+  // userPhoneNumber prop removed
+  userCredits: number | null | undefined;
 }) {
   const [files, setFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [isMpesaModalOpen, setIsMpesaModalOpen] = useState(false); // Added state for Mpesa modal
+  // isMpesaModalOpen state removed
   const router = useRouter();
 
   const handleRefresh = async () => {
@@ -131,41 +123,10 @@ export function DashboardClient({
             <p className="text-right text-sm text-muted-foreground">Credits</p>
             <p className="text-right text-lg font-semibold">{userCredits ?? 0}</p>
           </div>
-          <Dialog open={isMpesaModalOpen} onOpenChange={setIsMpesaModalOpen}>
-            <DialogTrigger asChild>
-              <Button>Buy Credits</Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
-            <DialogHeader>
-              <DialogTitle>Buy Credits</DialogTitle>
-              <DialogDescription>
-                Top up your account using MPESA. Select a pack to continue.
-              </DialogDescription>
-            </DialogHeader>
-            <MpesaCheckoutForm
-              userPhoneNumber={userPhoneNumber}
-              onPaymentInitiated={(initiationMessage) => {
-                setIsMpesaModalOpen(false); // Close the modal
-
-                // Display a toast guiding the user about next steps
-                toast.info("STK Push Sent Successfully!", {
-                  description: `${initiationMessage} Please complete the payment on your phone. Your credit balance will update automatically after confirmation. You can also manually refresh.`,
-                  duration: 8000, // Give user more time to read
-                });
-
-                // Refresh the dashboard data to potentially pick up updated credits
-                router.refresh();
-              }}
-            />
-            {/* Optional Footer for manual close
-            <DialogFooter>
-              <Button type="button" variant="secondary" onClick={() => setIsMpesaModalOpen(false)}>
-                Close
-              </Button>
-            </DialogFooter>
-            */}
-          </DialogContent>
-        </Dialog>
+          <Link href="/dashboard/billing">
+            <Button>Buy Credits</Button>
+          </Link>
+        </div>
       </div>
 
       <Tabs defaultValue="upload">

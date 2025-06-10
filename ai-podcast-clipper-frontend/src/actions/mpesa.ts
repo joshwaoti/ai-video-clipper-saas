@@ -9,7 +9,7 @@ import { MpesaService } from "~/lib/mpesa/service";
 export type CreditPack = "small" | "medium" | "large";
 
 const CREDIT_PACKS: Record<CreditPack, { amount: number; credits: number }> = {
-  small: { amount: 1, credits: 50 }, // KES 999
+  small: { amount: 999, credits: 50 }, // KES 999
   medium: { amount: 2499, credits: 150 }, // KES 2,499
   large: { amount: 6999, credits: 500 }, // KES 6,999
 };

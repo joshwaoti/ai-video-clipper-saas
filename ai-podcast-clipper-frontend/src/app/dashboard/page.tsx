@@ -37,8 +37,8 @@ export default async function DashboardPage() {
           createdAt: "desc",
         },
       },
-      phoneNumber: true, // Added
-      credits: {         // Added to fetch credits object
+      // phoneNumber: true, // Removed as it's no longer needed by DashboardClient for MPESA modal
+      credits: {
         select: {
           amount: true,
         },
@@ -59,8 +59,8 @@ export default async function DashboardPage() {
     <DashboardClient
       uploadedFiles={formattedFiles}
       clips={userData.clips}
-      userPhoneNumber={userData.phoneNumber}
-      userCredits={userData.credits?.amount ?? 0} // Pass credits amount, default to 0
+      // userPhoneNumber prop removed
+      userCredits={userData.credits?.amount ?? 0}
     />
   );
 }
