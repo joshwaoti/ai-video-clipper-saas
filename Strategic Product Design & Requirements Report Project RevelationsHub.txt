@@ -1,0 +1,268 @@
+﻿Strategic Product Design & Requirements Report: Project RevelationsHub
+1. Executive Summary and Strategic Positioning
+The intersection of faith-based ministry and artificial intelligence represents a rapidly maturing vertical within the broader SaaS landscape. Religious organizations, historically slower to adopt bleeding-edge technology, are currently undergoing a digital transformation accelerated by the necessity of hybrid worship and the dominance of short-form video on social media platforms. "RevelationsHub," the proposed application, is positioned to enter this market not merely as a utility for clipping video but as a comprehensive "Ministry Operating System" that unifies media engineering, pastoral care, and content dissemination.
+This report serves as the definitive Product Requirements Document (PRD) and Design Language System (DLS) for the frontend development of RevelationsHub. It is grounded in an exhaustive analysis of the current market leader, SermonShots, while integrating superior user experience (UX) patterns from broader content creation platforms like Munch, Pulpit AI, and Descript. The objective is to leverage the existing backend infrastructure to deliver a user interface that is significantly more intuitive, visually distinct, and feature-rich than the incumbent competition.
+1.1 The Market Opportunity
+Current solutions often force a dichotomy between "technical" video editing and "pastoral" content creation. SermonShots has successfully validated the market demand for automated clipping 1, yet its interface remains largely utilitarian and segmented. RevelationsHub will disrupt this by deploying a "Hub-and-Spoke" architecture where the sermon video serves as the central node, and all derivative content—from TikTok reels to small group discussion guides—radiates outward in a unified, fluid dashboard.
+1.2 Design Philosophy: "Divine Harmony"
+To distinguish RevelationsHub from the corporate blues of SermonShots 3 and the aggressive reds of Munch 4, the application will adopt a "Divine Harmony" design language. This aesthetic utilizes a sophisticated palette of deep amethyst and calming pacific blues, balanced with soft lavender and cotton candy tones. This creates a visual environment that is both welcoming and professional, avoiding the coldness of typical SaaS tools.
+2. Comprehensive Competitive Landscape Analysis
+A rigorous deconstruction of the competitive environment is essential to identify unsatisfied user requirements and opportunities for differentiation. The analysis focuses on the feature sets, pricing models, and user interface paradigms of the primary competitor, SermonShots, and secondary competitors in the AI video space.
+2.1 Primary Competitor Deep Dive: SermonShots
+SermonShots creates value by reducing the sermon repurposing workflow from hours to minutes.1 However, its interface reflects a "feature-first" rather than "experience-first" approach.
+2.1.1 Functional Architecture & Pricing Implications
+The feature set of SermonShots creates specific UI requirements that RevelationsHub must accommodate, specifically regarding tiered access and feature locking.
+
+
+Tier
+	Price (Monthly/Annual)
+	Core Features & UI Implications
+	Free
+	$0 / Free
+	Limitations UI: Access limited to 2 clips. The UI must prominently feature upgrade prompts when limits are reached. Watermarks are applied to exports.3
+	Plus
+	$49.99 / $479.88
+	Video UI: Unlocks unlimited clips and the "AI Camera Crew" toggle. Audio UI: Adds Podcast audio export and transcription editing interface.3
+	Silver
+	$67.00 / $684.00
+	Discipleship UI: This is the critical "upsell" tier. It unlocks the "Discipleship" tab (Discussion Guides, Devotionals) and the Blog Generator. The UI must visualize these tools as premium assets.3
+	Gold
+	$97.00 / $1,044.00
+	Advanced Text: Unlocks advanced text manipulation tools.
+	Platinum
+	$195.00 / $2,052.00
+	Translation UI: Adds live translation capabilities, requiring a complex multi-language interface for audio and subtitles.5
+	2.1.2 User Experience & Interface Critique
+SermonShots utilizes a linear, wizard-based workflow. Users proceed from "Art" (Template Selection) to "Selection" (Transcript) to "Compile" (Final Polish).6
+* Friction Point: This linearity prevents non-linear creativity. If a user wants to change a template after editing the transcript, the navigation can be cumbersome.
+* Visual Fatigue: The interface relies heavily on standard white/grey backgrounds, which can cause eye strain during long editing sessions.
+* Disjointed Tools: The "Discipleship" features (devotionals, guides) often feel like separate webpages rather than integrated parts of the video workflow.3
+RevelationsHub Opportunity: Abandon the linear wizard. Adopting a "Non-Linear Editor" (NLE) approach where templates, transcripts, and timelines are accessible simultaneously in a workspace view will significantly enhance user agency.
+2.2 Secondary Competitor Analysis
+2.2.1 Munch (GetMunch)
+Munch focuses heavily on "virality" and "trends," using AI to score clips based on marketing data.4
+* UI Strength: The "Bento Grid" dashboard showing all clips with their "Trend Score" is highly effective for quick decision-making.7
+* Visual Weakness: The aggressive red branding 4 feels corporate and alert-heavy, which may not resonate with the calmer, pastoral mindset of church staff.
+2.2.2 Pulpit AI
+Pulpit AI excels at "Content Stacking"—turning one sermon into a newsletter, a blog, and a guide.8
+* UI Strength: Deep integration with church management dashboards (like Subsplash) and a "Chat" interface where users can ask the AI questions about their sermon.8
+* RevelationsHub Integration: We will incorporate a "Sermon Assistant" chat widget in the sidebar to replicate this conversational interaction model.
+2.2.3 Opus Clip
+Known for its superior vertical video reframing.
+* UI Strength: Simple, effective visualization of the "Active Speaker" zone in the video editor.
+* Weakness: Lacks the "Discipleship" context entirely.10
+3. Design Language System: "Divine Harmony"
+Critical Distinction: The color palette defined below is strictly for the RevelationsHub Application Interface (buttons, sidebars, backgrounds, landing pages). It is not the User's Brand Kit. The user's content (videos, PDFs) will use the colors they upload in their personal settings.
+3.1 Global Application Color Palette
+The strategy employs "Sanctuary Mode" (Dark) for media-heavy tasks (dashboard, video editing) and "Scripture Mode" (Light) for text-heavy tasks (blogs, reading guides).
+3.1.1 Sanctuary Mode (Dark Palette - Default UI)
+This mode uses the deep purple as the foundation to reduce eye strain while using the vibrant blue and pink for accents.
+
+
+Semantic Usage
+	Color Name
+	Hex Code
+	Description & Psychological Effect
+	Background Base
+	Dark Amethyst
+	#301a4b
+	A deep, rich purple base. Replaces standard black/slate. Feels royal and creative.11
+	Surface/Card
+	Amethyst Shade
+	#231238
+	A slightly darker shade of the base (20% darker) for cards and sidebars to create depth.
+	Primary Brand
+	Pacific Blue
+	#6db1bf
+	A calming teal-blue. Used for primary buttons ("Create Clip", "Export") and active states.
+	Secondary Brand
+	Cotton Candy
+	#f39a9d
+	A warm pink. Used for AI features ("Generate", "Analyze") and highlights.
+	Text Primary
+	Lavender Blush
+	#ffeaec
+	A very pale off-white pink. Provides high contrast against the Amethyst background without the harshness of pure white.
+	Text Muted
+	Pacific Blue (Dim)
+	#548a94
+	Used for metadata and timestamps.
+	Success/Status
+	Hunter Green
+	#3f6c51
+	Used for "Ready" badges, "Saved" states, and positive confirmation.
+	3.1.2 Scripture Mode (Light Palette - Document UI)
+This palette flips the scheme for document editing, using the pale lavender as the page background for a paper-like feel.
+Semantic Usage
+	Color Name
+	Hex Code
+	Description
+	Background Base
+	Lavender Blush
+	#ffeaec
+	A soft, warm light background. Much easier on the eyes than stark white.
+	Surface/Paper
+	White
+	#FFFFFF
+	Used strictly for the "document sheet" in the center of the screen.
+	Text Primary
+	Dark Amethyst
+	#301a4b
+	High contrast purple text. Used for headers and body copy.
+	Accent/Link
+	Pacific Blue
+	#6db1bf
+	Used for hyperlinks and tooltips.
+	Highlights
+	Cotton Candy
+	#f39a9d
+	Used for selection highlights or "comment" bubbles.
+	Decor/Borders
+	Hunter Green
+	#3f6c51
+	Used for subtle borders or dividing lines to ground the airy palette.
+	3.2 Typography System
+The typography must balance the need for high-density data display (transcripts, timestamps) with the need for modern, approachable aesthetics.
+* Headings (Display): Outfit. A geometric sans-serif. It feels modern and friendly. Used for Page Titles and H1-H3.
+* Body Copy (Interface): Inter. The industry standard for SaaS interfaces due to its high x-height. Critical for the dense text in the dashboard and sidebar.
+* Timestamps & Code: JetBrains Mono. A monospaced font ensures timecodes (00:14:23) align perfectly vertically in the editor.
+3.3 Iconography and Shape Language
+* Corner Radius: 16px. The "Cotton Candy" and "Lavender" vibes call for softer, more rounded corners than standard tech apps.
+* Stroke Weight: 1.5px stroke for icons.
+* Glassmorphism: Use Dark Amethyst with 90% opacity and blur for floating panels to maintain context.
+4. Product Requirements Document (PRD): Core Architecture
+4.1 System Hierarchy
+RevelationsHub is structured around the Sermon Entity. A Sermon is a distinct data type containing metadata (Date, Series, Speaker).
+4.2 User Roles & Permissions
+* Admin: Full access to Brand Kit, Billing, and Team Management.
+* Editor: Access to upload, edit, and generate content.
+* Contributor: Can view content and download assets.
+4.3 Onboarding Flow Requirements
+1. Signup: Email/Password or SSO.
+2. Organization Profile: Church Name, Denomination.
+3. User Brand Kit Setup (Feature):
+   * Purpose: This is where the user uploads their church's branding assets to be used in the video clips and PDF exports.
+   * Logo Upload: Light and Dark versions.
+   * Color Selection: User inputs their own Hex codes (e.g., if their church is Orange and Black, they enter those here).
+   * Font Selection: User uploads custom font files or selects from Google Fonts.
+   * Outcome: This data is stored to populate "Brand Match" templates later. It does not change the RevelationsHub UI colors (#301a4b, etc.).
+5. Detailed Screen Specifications: External Marketing Site
+The marketing site must strictly follow the "Divine Harmony" global palette to establish the RevelationsHub brand identity.
+5.1 Landing Page Structure
+* Hero Section:
+   * Background: Dark Amethyst (#301a4b).
+   * Visual: A 3D illustration of a glass prism glowing in Cotton Candy pink and Pacific Blue.
+   * Headline: "Your Sunday Message. Monday's Movement."
+   * CTA: "Start Free Trial" Button in Pacific Blue (#6db1bf) with Dark Amethyst text.
+* Feature Bento Grid:
+   * Card Background: Amethyst Shade (#231238).
+   * Accents: Icons in Cotton Candy (#f39a9d).
+   * Content: Cards for "Magic Clips," "Discussion Guides," and "Social Carousel."
+5.2 Pricing Page
+* Layout: Three cards (Plus, Silver, Gold).
+* Design: Lavender Blush background. Cards are white with Hunter Green borders for the premium tier.
+* Highlights: The "Silver" tier button is Pacific Blue.
+6. Detailed Screen Specifications: The Sermon Hub Application
+This is the core of the user's request. The application interface must be robust, responsive, and organized using the global palette.
+6.1 App Main Page (The Global Library)
+* Goal: Management of the sermon archive.
+* Global Sidebar (Collapsed State):
+   * When on the main library page, a thin Global Nav exists on the left (Home, Library, Settings, Brand Kit).
+   * Background: Dark Amethyst.
+* The Grid:
+   * Cards: 16:9 thumbnails.
+   * Status Badges: Hunter Green (#3f6c51) for "Ready", Pacific Blue for "Processing".
+   * Hover Interaction: Cards glow with a Cotton Candy (#f39a9d) border on hover.
+6.2 The Detailed Sermon Dashboard (The "Single Sidebar" Experience)
+Critical UX Behavior: When a user clicks a sermon to enter the dashboard, the Global Navigation Sidebar disappears/collapses entirely. It is replaced by the specific Sermon Tools Sidebar. This prevents "sidebar inception" (two sidebars taking up screen real estate). A small "Back to Library" arrow at the very top left allows the user to return to the global view.
+6.2.1 Left Sidebar (The Sermon Toolkit)
+* Design: Fixed width (260px). Background color Dark Amethyst (#301a4b).
+* Navigation: Top Left contains a < Back button to return to the global library.
+* Section 1: Social Media
+   * Icon Color: Pacific Blue (#6db1bf).
+   * Items: Magic Clips, Image Quotes, Social Carousel.
+* Section 2: Discipleship
+   * Icon Color: Cotton Candy (#f39a9d).
+   * Items: Discussion Guide, Devotionals, Sermon Outline.
+* Section 3: More Content
+   * Icon Color: Hunter Green (#3f6c51).
+   * Items: Transcription, Blog Post, Podcast Audio, Summaries.
+6.2.2 Main Dashboard Area (The "Overview" State)
+When no tool is selected, the main area shows a "Bento Grid" summary.
+* Background: Amethyst Shade (#231238).
+* Grid Item 1 (Video Player): Top Left.
+* Grid Item 2 (AI Insights): Top Right. Text in Lavender Blush.
+* Grid Item 3 (Top Clips): Middle Row. Scrollable list of clips.
+6.3 Tool-Specific Screens
+6.3.1 Magic Clips Tool
+* Layout: Two columns.
+* Left Column (Clip List): Background Dark Amethyst. Selected clip highlighted in Pacific Blue (#6db1bf) with opacity.
+* Right Column (Preview): Large vertical player.
+* Buttons: Action buttons are Pacific Blue (#6db1bf) with white text.
+6.3.2 Discussion Guide Tool
+* Mode: Switches to Scripture Mode (Light).
+* Background: Lavender Blush (#ffeaec).
+* Paper Canvas: White (#FFFFFF) centered in the screen.
+* Typography: Headers in Dark Amethyst (#301a4b), Accents in Hunter Green (#3f6c51).
+* Interaction: A Pacific Blue floating button for "Regenerate AI".
+7. Detailed Screen Specifications: The Video Editor
+7.1 Editor Layout
+* Background: Dark Amethyst (#301a4b).
+* Top Bar: Filename, Undo/Redo, Export Button (Pacific Blue).
+* Bottom Panel (Timeline):
+   * Track 1 (Video): Thumbnails.
+   * Track 2 (Audio): Waveform visualization in Cotton Candy (#f39a9d).
+   * Track 3 (Captions): Blocks in Pacific Blue (#6db1bf).
+   * Playhead: White vertical line.
+7.2 Micro-Animations
+* Hover States: Buttons lift and glow Cotton Candy pink.
+* Scrubbing: The Cotton Candy waveform brightens when being scrubbed.
+8. Video Template Design Specifications
+The templates below are used to style the output video content.
+1. The "Modern Minimalist":
+   * Style: Clean Lavender Blush text box with Dark Amethyst text (Using RevelationsHub branding as a preset).
+2. The "Revelations Brand":
+   * Style: Uses Pacific Blue and Cotton Candy gradients for dynamic word-by-word highlighting (App Brand Preset).
+3. The "User Brand Match" (Dynamic):
+   * Style: This template pulls the colors and fonts directly from the User Brand Kit settings (Section 4.3). It ignores the app's purple/teal theme and uses whatever the church uploaded (e.g., Orange/Black).
+9. Comprehensive Prompt Engineering Document
+9.1 Landing Page Prompts
+Prompt 1: Hero Section
+"High-fidelity UI design of a SaaS landing page hero section for 'RevelationsHub'. Color Palette: Background is Deep Amethyst (#301a4b). Accents in Pacific Blue (#6db1bf) and Cotton Candy Pink (#f39a9d). Center stage is a stunning 3D abstract glass illustration of a prism refracting light. Headline typography is large, bold sans-serif in Lavender Blush (#ffeaec). CTA button is Pacific Blue with rounded corners. Navigation bar is transparent glassmorphism. 8k resolution, modern SaaS 2025."
+Prompt 2: Pricing Section
+"UI design of a pricing table for 'RevelationsHub'. Light Mode. Background is Lavender Blush (#ffeaec). Three cards side-by-side in pure White. The center card is elevated with a Pacific Blue (#6db1bf) border and a 'Most Popular' badge. Text is Dark Amethyst (#301a4b). Checkmarks are Hunter Green (#3f6c51). Clean, approachable, easy to read."
+9.2 Application Prompts
+Prompt 3: App Main Page (Library)
+"Dashboard UI for 'RevelationsHub' web app. Dark Mode. Background is Dark Amethyst (#301a4b). Grid of 16:9 video thumbnails. Badges on thumbnails use Hunter Green (#3f6c51) for 'Ready'. Top navigation bar is simple with a search bar. The interface feels deep, creative, and professional. No sidebars visible, just the main library grid."
+Prompt 4: The Sermon Dashboard (Single Sidebar)
+"Detailed SaaS dashboard UI for a specific sermon view. Single Sidebar Layout: Only one sidebar on the left, colored Dark Amethyst (#301a4b). Sidebar items include 'Magic Clips' (icon in Pacific Blue), 'Discussion Guide' (icon in Cotton Candy), and 'Transcription' (icon in Hunter Green). Main Area: Background is slightly lighter Amethyst (#231238). A bento grid layout displays a video player, a list of clips, and AI insights. Text is Lavender Blush (#ffeaec)."
+Prompt 5: Discipleship Tool (Document Editor)
+"UI design of a text editor within 'RevelationsHub'. Light Mode (Scripture Mode). Background is Lavender Blush (#ffeaec). A centered white A4-style paper sheet contains the 'Discussion Guide'. Text headers are Dark Amethyst (#301a4b). A floating action button in the corner is Pacific Blue (#6db1bf). The sidebar remains on the left in Dark Amethyst for contrast."
+9.3 Editor & Template Prompts
+Prompt 6: Video Editor Timeline
+"Close-up UI design of a video editing timeline. Background is Dark Amethyst (#301a4b). Three horizontal tracks. Audio waveform is visualized in bright Cotton Candy Pink (#f39a9d). Caption blocks are Pacific Blue (#6db1bf). The playhead is a sharp white line. Timecode text uses JetBrains Mono font in Lavender Blush (#ffeaec)."
+Prompt 7: User Brand Kit Settings
+"UI settings screen for 'User Brand Kit'. Grid layout. Card 1: 'Upload Logo' with a drag-and-drop zone. Card 2: 'My Church Colors' showing input fields for Hex codes. Card 3: 'My Fonts'. Background of the page is Dark Amethyst (#301a4b), but the mockups inside the cards show user-generated colors like orange or green to demonstrate the feature. Toggle switches are Pacific Blue (#6db1bf)."
+10. Implementation & Handoff Guide
+10.1 Asset Export Strategy
+* Colors: Define strictly as CSS variables for the app shell:
+   * --color-base: #301a4b
+   * --color-primary: #6db1bf
+   * --color-secondary: #f39a9d
+   * --color-text-light: #ffeaec
+   * --color-success: #3f6c51
+* Sidebar Logic: Ensure the router configuration unmounts the GlobalSidebar component and mounts the SermonSidebar component upon entering the /sermon/:id route.
+11. Conclusion
+RevelationsHub differentiates itself not just through features, but through a "Divine Harmony" visual identity that blends the spiritual (Amethyst/Lavender) with the technological (Pacific Blue). By strictly adhering to the single-sidebar UX pattern and the provided color palette for the application interface (while allowing users to upload their own disparate branding for content), the application offers a focused, serene, and powerful environment for ministry content creation.
+Works cited
+1. Testimonials - Sermon Shots, accessed December 22, 2025, https://sermonshots.com/testimonials/
+2. Sermon Shots Review | Reverend Scott Bach-Hansen - YouTube, accessed December 22, 2025, https://www.youtube.com/shorts/uN3k_LDO3aU
+3. Sermon Shots - Repurpose Sermons Into Clips & Other Engaging Content, accessed December 22, 2025, https://sermonshots.com/
+4. Meet Munch - The #1 AI Video Repurposing Platform., accessed December 22, 2025, https://www.getmunch.com/
+5. How To Choose The Right Plan For You - Sermon Shots, accessed December 22, 2025, https://support.sermonshots.com/en/knowledgebase/article/how-to-choose-the-right-plan-for-you
+6. From Pulpit to Platform: How to Multiply Your Message with Sermon Shots, accessed December 22, 2025, https://www.youtube.com/watch?v=Hu-vQR0dXlM
+7. AI Clips for Sermons: Comparing 4 Platforms | AI for Churches: Let AI Power You, accessed December 22, 2025, https://ai-for-churches.com/ai-clips-for-sermons-comparing-4-platforms/
+8. Pulpit AI by Subsplash, accessed December 22, 2025, https://support.subsplash.com/en/articles/10192236-pulpit-ai-by-subsplash
+9. Pulpit AI + Subsplash Media - YouTube, accessed December 22, 2025, https://www.youtube.com/watch?v=2aGJVJzXJFQ
+10. Top 5 AI Video Repurposing & Editing Apps Comparison 2025 | Vizard, Opus, Vidyo, Munch, Choppity… - YouTube, accessed December 22, 2025, https://www.youtube.com/watch?v=VVqJirX9IXw
+11. Top Website Color Schemes for Eye-Catching Admin Templates for 2025 - BootstrapDash, accessed December 22, 2025, https://www.bootstrapdash.com/blog/best-color-schemes-for-websites
