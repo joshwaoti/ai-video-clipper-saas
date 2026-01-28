@@ -21,6 +21,9 @@ import re
 import pysubs2
 from tqdm import tqdm
 import whisperx
+from ultralytics import YOLO
+import parselmouth
+from parselmouth.praat import call
 
 
 class ProcessVideoRequest(BaseModel):
@@ -61,6 +64,7 @@ image = (modal.Image.from_registry(
     ])
     .pip_install_from_requirements("requirements.txt")
     .pip_install("pysubs2")
+    .pip_install("ultralytics", "DeepFilterNet", "praat-parselmouth")
     .add_local_dir("asd", "/asd", copy=True, ignore=[".git", "**/.git"]))
 
 app = modal.App("ai-podcast-clipper", image=image)
@@ -72,6 +76,109 @@ volume = modal.Volume.from_name(
 mount_path = "/root/.cache/torch"
 
 auth_scheme = HTTPBearer()
+
+
+class CinematicCamera:
+    """
+    Implements a virtual camera with stabilization, dead zones, and damping
+    to mimic a professional camera operator.
+    """
+    def __init__(self, target_width=1080, target_height=1920, dead_zone_ratio=0.15, alpha=0.08):
+        self.target_width = target_width
+        self.target_height = target_height
+        self.dead_zone_ratio = dead_zone_ratio
+        self.alpha = alpha  # Smoothing factor (lower = smoother/slower)
+        self.current_center_x = None
+
+    def update(self, frame_width, frame_height, subject_box):
+        """
+        Update camera position based on subject detection.
+        subject_box: [x1, y1, x2, y2]
+        """
+        if subject_box is None:
+            # If subject lost, stay put or drift to center? Stay put is safer to avoid jumps.
+            target_x = self.current_center_x if self.current_center_x is not None else frame_width / 2
+        else:
+            x1, y1, x2, y2 = subject_box
+            target_x = (x1 + x2) / 2
+
+        # Initialize
+        if self.current_center_x is None:
+            self.current_center_x = target_x
+
+        # Dead Zone Logic
+        # If target moves only slightly (within dead zone relative to current camera), ignore.
+        # Calculate distance from current camera center
+        diff = target_x - self.current_center_x
+        dead_zone_width = frame_width * self.dead_zone_ratio
+        
+        if abs(diff) < (dead_zone_width / 2):
+            # Inside dead zone - hold current position (target is effectively "current")
+            effective_target = self.current_center_x
+        else:
+            # Outside - move towards the subject, but respect the dampening
+            effective_target = target_x
+
+        # Apply PID/Exponential Damping
+        self.current_center_x = self.current_center_x + self.alpha * (effective_target - self.current_center_x)
+
+        # Boundary checks
+        half_w = self.target_width / 2
+        min_x = half_w
+        max_x = frame_width - half_w
+        final_center_x = max(min_x, min(self.current_center_x, max_x))
+        self.current_center_x = final_center_x
+
+        # Calculate crop top-left
+        crop_x = int(final_center_x - half_w)
+        
+        # Vertical centering (assuming subject is roughly vertically centered or we crop center)
+        # Ideally we track vertical too, but horizontal is most critical for landscape->vertical
+        crop_y = (frame_height - self.target_height) // 2
+        
+        return crop_x, crop_y
+
+
+def enhance_audio(input_path: str, output_path: str):
+    """
+    Enhance audio using DeepFilterNet to remove reverb and noise.
+    """
+    print(f"Enhancing audio with DeepFilterNet: {input_path}")
+    # We use subprocess to call deepFilter. 
+    # Assumes 'deepFilter' is in PATH (installed via pip).
+    # Output dir logic: deepFilter outputs to a dir.
+    
+    output_dir = os.path.dirname(output_path)
+    # deepFilter generates file with suffix, so we might need to rename.
+    
+    cmd = [
+        "deepFilter",
+        input_path,
+        "-o", output_dir
+    ]
+    
+    try:
+        subprocess.run(cmd, check=True, capture_output=True)
+        
+        # Find the generated file. DeepFilterNet usually appends _DeepFilterNet3.wav
+        # We need to find it and rename to output_path
+        base_name = os.path.splitext(os.path.basename(input_path))[0]
+        # glob for candidate
+        candidates = glob.glob(os.path.join(output_dir, f"{base_name}*DeepFilterNet*.wav"))
+        if candidates:
+            # Success
+            enhanced_file = candidates[0]
+            if os.path.exists(output_path):
+                os.remove(output_path)
+            os.rename(enhanced_file, output_path)
+            print(f"Audio enhancement complete: {output_path}")
+        else:
+            print("DeepFilterNet output not found, using original.")
+            shutil.copy(input_path, output_path)
+            
+    except Exception as e:
+        print(f"DeepFilterNet failed: {e}. Using original audio.")
+        shutil.copy(input_path, output_path)
 
 
 def create_vertical_video(tracks, scores, pyframes_path, pyavi_path, audio_path, output_path, framerate=25):
@@ -176,6 +283,225 @@ def create_vertical_video(tracks, scores, pyframes_path, pyavi_path, audio_path,
                       f"{output_path}")
     subprocess.run(ffmpeg_command, shell=True, check=True, text=True)
 
+
+def analyze_video_yolo(video_path: str, model_name="yolov8n.pt"):
+    """
+    Run YOLOv8 tracking on the video.
+    Returns list of frame detections: [ [x1,y1,x2,y2] or None, ... ]
+    """
+    print(f"Running YOLOv8 tracking on {video_path}...")
+    try:
+        model = YOLO(model_name)
+    except Exception as e:
+        print(f"Failed to load YOLO model: {e}. Downloading default.")
+        model = YOLO("yolov8n.pt")
+
+    # Run tracking
+    results = model.track(source=video_path, stream=True, persist=True, verbose=False, classes=[0]) # class 0 is person
+    
+    detections = []
+    for r in results:
+        # Get best person detection (highest confidence)
+        best_box = None
+        max_conf = -1.0
+        
+        if r.boxes:
+            for box in r.boxes:
+                # We already filtered classes=[0] but check to be safe
+                if int(box.cls[0]) == 0:
+                    conf = float(box.conf[0])
+                    if conf > max_conf:
+                        max_conf = conf
+                        best_box = box.xyxy[0].tolist() # [x1, y1, x2, y2]
+        
+        detections.append(best_box)
+        
+    return detections
+
+
+def create_vertical_video_sermon(video_path, detections, output_path, audio_path):
+    """
+    Create vertical video using CinematicCamera logic and YOLO detections.
+    """
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        raise ValueError(f"Could not open video: {video_path}")
+        
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    
+    # Initialize Camera
+    cam = CinematicCamera(target_width=1080, target_height=1920)
+    
+    # Validate video properties
+    if width <= 0 or height <= 0 or fps <= 0:
+        raise ValueError(f"Invalid video properties: width={width}, height={height}, fps={fps}")
+    
+    print(f"Source video: {width}x{height} @ {fps:.2f} fps")
+    
+    # Setup Writer using temp file, ensure directory exists
+    output_dir = os.path.dirname(output_path)
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+    
+    temp_video = os.path.join(output_dir, "temp_sermon_raw.mp4")
+    temp_encoded = os.path.join(output_dir, "temp_sermon_encoded.mp4")
+    
+    # Use cv2.VideoWriter instead of ffmpegcv (more reliable)
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    writer = cv2.VideoWriter(temp_video, fourcc, fps, (1080, 1920))
+    
+    if not writer.isOpened():
+        raise ValueError(f"Failed to create video writer for {temp_video}")
+    
+    idx = 0
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    
+    print(f"Rendering sermon video: {total_frames} frames")
+    
+    # We must iterate matches detections
+    # Note: detections might be shorter/longer than cv2 reads depending on sync
+    
+    for _ in tqdm(range(total_frames), desc="Rendering Sermon"):
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        if idx < len(detections):
+            box = detections[idx]
+        else:
+            box = None
+            
+        # Determine Scale to fit Height 1920
+        # If source height < 1920, scale up. If > 1920, scale down.
+        # We enforce filling vertical space.
+        target_h = 1920
+        scale = target_h / height
+        
+        # Scale the frame
+        # cv2.resize might be slow for 4K. 
+        # Optimization: Crop horizontally first? No, we need center X first.
+        
+        # Scale box to new dimensions
+        # Original: box matches 'frame' (width x height)
+        # Scaled: box matches (width*scale x 1920)
+        
+        if box:
+            box_scaled = [c * scale for c in box]
+        else:
+            box_scaled = None
+            
+        w_scaled = int(width * scale)
+        
+        # Update Camera
+        crop_x, crop_y = cam.update(w_scaled, target_h, box_scaled)
+        
+        # Optimization: Don't resize full frame if we only need a crop.
+        # We need [crop_y : crop_y+1920, crop_x : crop_x+1080] from the SCALED image.
+        # In ORIGINAL matching, this is:
+        # [crop_y/scale : ..., crop_x/scale : ...]
+        
+        orig_crop_x = int(crop_x / scale)
+        orig_crop_y = int(crop_y / scale)
+        orig_crop_w = max(1, int(1080 / scale))  # Ensure minimum of 1
+        orig_crop_h = max(1, int(1920 / scale))  # Ensure minimum of 1
+        
+        # Clamp original crop - ensure valid bounds
+        orig_crop_x = max(0, min(orig_crop_x, width - orig_crop_w))
+        orig_crop_y = max(0, min(orig_crop_y, height - orig_crop_h))
+        
+        # Ensure we have valid crop dimensions
+        if orig_crop_w <= 0 or orig_crop_h <= 0 or orig_crop_x < 0 or orig_crop_y < 0:
+            # Fallback: resize entire frame to target
+            final_frame = cv2.resize(frame, (1080, 1920), interpolation=cv2.INTER_LINEAR)
+        else:
+            # Crop from original
+            crop_orig = frame[orig_crop_y : orig_crop_y + orig_crop_h, 
+                              orig_crop_x : orig_crop_x + orig_crop_w]
+            
+            # Check crop is valid before resizing
+            if crop_orig.size == 0 or crop_orig.shape[0] == 0 or crop_orig.shape[1] == 0:
+                final_frame = cv2.resize(frame, (1080, 1920), interpolation=cv2.INTER_LINEAR)
+            else:
+                # Now resize ONLY the crop to 1080x1920
+                final_frame = cv2.resize(crop_orig, (1080, 1920), interpolation=cv2.INTER_LINEAR)
+        
+        # Ensure frame is in correct format (BGR, uint8, correct dimensions)
+        if final_frame.shape != (1920, 1080, 3):
+            final_frame = cv2.resize(final_frame, (1080, 1920), interpolation=cv2.INTER_LINEAR)
+        
+        writer.write(final_frame)
+        idx += 1
+        
+    writer.release()
+    cap.release()
+    
+    print(f"Frames written: {idx}")
+    
+    # Re-encode with ffmpeg for better compatibility (cv2 mp4v codec may not be widely compatible)
+    print("Re-encoding video with libx264...")
+    subprocess.run(
+        f"ffmpeg -y -i {temp_video} -c:v libx264 -preset fast -crf 23 {temp_encoded}",
+        shell=True, check=True, capture_output=True
+    )
+    
+    # Mux Audio
+    print("Muxing audio...")
+    subprocess.run(f"ffmpeg -y -i {temp_encoded} -i {audio_path} -c:v copy -c:a aac {output_path}", 
+                   shell=True, check=True)
+    
+    # Cleanup
+    if os.path.exists(temp_video):
+        os.remove(temp_video)
+    if os.path.exists(temp_encoded):
+        os.remove(temp_encoded)
+
+
+def analyze_prosody(audio_path: str):
+    """
+    Analyze audio prosody to identify rhetorical intensity peaks.
+    Returns a list of timestamps (seconds) where intensity/pitch is high.
+    """
+    print(f"Analyzing prosody for {audio_path}...")
+    try:
+        sound = parselmouth.Sound(audio_path)
+        # Extract intensity
+        intensity = sound.to_intensity()
+        values = intensity.values[0] # The array
+        times = intensity.xs() # The times
+        
+        if len(values) == 0:
+            return []
+            
+        mean_intensity = np.mean(values)
+        std_intensity = np.std(values)
+        threshold = mean_intensity + 1.5 * std_intensity
+        
+        peaks = []
+        # Finding continuous segments > threshold
+        # We cluster them to avoid returning every millisecond
+        
+        current_peak_start = None
+        min_duration = 2.0 # Minimum high-intensity duration
+        
+        for t, val in zip(times, values):
+            if val > threshold:
+                if current_peak_start is None:
+                    current_peak_start = t
+            else:
+                if current_peak_start is not None:
+                    duration = t - current_peak_start
+                    if duration > min_duration:
+                        # Append the range
+                        peaks.append(f"{current_peak_start:.1f}s - {t:.1f}s")
+                    current_peak_start = None
+                    
+        print(f"Detected {len(peaks)} rhetorical peaks")
+        return peaks
+    except Exception as e:
+        print(f"Prosody analysis failed: {e}")
+        return []
 
 def create_subtitles_with_ffmpeg(
     transcript_segments: list, 
@@ -378,6 +704,7 @@ def process_clip(
     end_time: float, 
     clip_index: int, 
     transcript_segments: list,
+    video_type: str = "podcast",
     caption_effect: str = "karaoke",
     caption_font: str = "Anton",
     caption_font_size: int = 140,
@@ -405,7 +732,7 @@ def process_clip(
     pyavi_path.mkdir(exist_ok=True)
 
     duration = end_time - start_time
-    cut_command = (f"ffmpeg -i {original_video_path} -ss {start_time} -t {duration} "
+    cut_command = (f"ffmpeg -i '{original_video_path}' -ss {start_time} -t {duration} "
                    f"{clip_segment_path}")
     subprocess.run(cut_command, shell=True, check=True,
                    capture_output=True, text=True)
@@ -414,33 +741,61 @@ def process_clip(
     subprocess.run(extract_cmd, shell=True,
                    check=True, capture_output=True)
 
-    shutil.copy(clip_segment_path, base_dir / f"{clip_name}.mp4")
+    # Audio Enhancement (Sermon Only)
+    if video_type == "sermon":
+        try:
+            enhanced_audio_path = clip_dir / "pyavi" / "audio_enhanced.wav"
+            enhance_audio(str(audio_path), str(enhanced_audio_path))
+            # Replace original with enhanced
+            shutil.move(str(enhanced_audio_path), str(audio_path))
+            print("Using enhanced audio for processing")
+        except Exception as e:
+            print(f"Audio enhancement skipped due to error: {e}")
 
-    columbia_command = (f"python Columbia_test.py --videoName {clip_name} "
-                        f"--videoFolder {str(base_dir)} "
-                        f"--pretrainModel weight/finetuning_TalkSet.model")
-
-    columbia_start_time = time.time()
-    subprocess.run(columbia_command, cwd="/asd", shell=True)
-    columbia_end_time = time.time()
-    print(
-        f"Columbia script completed in {columbia_end_time - columbia_start_time:.2f} seconds")
-
-    tracks_path = clip_dir / "pywork" / "tracks.pckl"
-    scores_path = clip_dir / "pywork" / "scores.pckl"
-    if not tracks_path.exists() or not scores_path.exists():
-        raise FileNotFoundError("Tracks or scores not found for clip")
-
-    with open(tracks_path, "rb") as f:
-        tracks = pickle.load(f)
-
-    with open(scores_path, "rb") as f:
-        scores = pickle.load(f)
-
+    # Video Processing
     cvv_start_time = time.time()
-    create_vertical_video(
-        tracks, scores, pyframes_path, pyavi_path, audio_path, vertical_mp4_path
-    )
+    if video_type == "sermon":
+        print("Using Sermon Pipeline (YOLO + Cinematic Camera)")
+        # Run YOLO Detection
+        detections = analyze_video_yolo(str(clip_segment_path))
+        
+        # Create Vertical Video
+        create_vertical_video_sermon(
+            str(clip_segment_path), 
+            detections, 
+            str(vertical_mp4_path),
+            str(audio_path)
+        )
+    else:
+        print("Using Podcast Pipeline (Columbia TalkNet)")
+        # Legacy Pipeline
+        shutil.copy(clip_segment_path, base_dir / f"{clip_name}.mp4")
+
+        columbia_command = (f"python Columbia_test.py --videoName {clip_name} "
+                            f"--videoFolder {str(base_dir)} "
+                            f"--pretrainModel weight/finetuning_TalkSet.model")
+
+        columbia_start_time = time.time()
+        subprocess.run(columbia_command, cwd="/asd", shell=True)
+        columbia_end_time = time.time()
+        print(
+            f"Columbia script completed in {columbia_end_time - columbia_start_time:.2f} seconds")
+
+        tracks_path = clip_dir / "pywork" / "tracks.pckl"
+        scores_path = clip_dir / "pywork" / "scores.pckl"
+        if not tracks_path.exists() or not scores_path.exists():
+            raise FileNotFoundError("Tracks or scores not found for clip")
+
+        with open(tracks_path, "rb") as f:
+            tracks = pickle.load(f)
+
+        with open(scores_path, "rb") as f:
+            scores = pickle.load(f)
+
+        create_vertical_video(
+            tracks, scores, pyframes_path, pyavi_path, audio_path, vertical_mp4_path
+        )
+    
     cvv_end_time = time.time()
     print(
         f"Clip {clip_index} vertical video creation time: {cvv_end_time - cvv_start_time:.2f} seconds")
@@ -523,7 +878,9 @@ class AiPodcastClipper:
 
     def transcribe_video(self, base_dir: str, video_path: str) -> str:
         audio_path = base_dir / "audio.wav"
-        extract_cmd = f"ffmpeg -i {video_path} -vn -acodec pcm_s16le -ar 16000 -ac 1 {audio_path}"
+        
+        # Extract audio from video (video_path is always a local file path now)
+        extract_cmd = f"ffmpeg -i '{video_path}' -vn -acodec pcm_s16le -ar 16000 -ac 1 {audio_path}"
         subprocess.run(extract_cmd, shell=True,
                        check=True, capture_output=True)
 
@@ -583,7 +940,7 @@ class AiPodcastClipper:
         print(f"Transcription complete: {len(segments)} words extracted")
         return json.dumps(segments)
 
-    def identify_moments(self, transcript: dict, mode: str = "podcast"):
+    def identify_moments(self, transcript: dict, mode: str = "podcast", rhetorical_peaks: list = None):
         base_prompt = ""
         
         if mode == "sermon":
@@ -658,6 +1015,9 @@ Return ONLY a JSON array. Each object must have 'start' and 'end' keys with valu
 
 The output MUST be valid JSON that can be parsed by Python's json.loads() function.
 """
+            if rhetorical_peaks:
+                base_prompt += "\n\n## Audio Cues (Rhetorical Intensity)\nThe following timestamps marked high vocal intensity. Consider them as potential high-impact segments:\n"
+                base_prompt += "\n".join([f"- {p}" for p in rhetorical_peaks[:20]]) + "\n"
         else:
             # Default Podcast Prompt (Preserved from existing main.py)
             base_prompt = """
@@ -720,19 +1080,33 @@ The transcript is as follows:
 
         s3_key = request.s3_key
         
-        # Download video file from S3
-        video_path = base_dir / "input.mp4"
+        # Always download video locally to avoid ffmpeg issues with presigned URLs
+        # FFmpeg can crash (exit 139 - segfault) when processing URLs with special characters
         s3_client = boto3.client("s3")
-        s3_client.download_file("josh-video-clipper", s3_key, str(video_path))
+        print(f"Downloading video from S3: {s3_key}")
+        video_path_local = base_dir / "input_video.mp4"
+        s3_client.download_file("josh-video-clipper", s3_key, str(video_path_local))
+        video_path = str(video_path_local)
+        print(f"Video downloaded to: {video_path}")
         
         # Transcribe with WhisperX
         print("Running WhisperX transcription...")
-        transcript_segments_json = self.transcribe_video(base_dir, video_path)
-        transcript_segments = json.loads(transcript_segments_json)
+        transcript = self.transcribe_video(base_dir, video_path)
+        transcript_segments = json.loads(transcript)
+        
+        # Analyze Prosody (Sermon Only)
+        rhetorical_peaks = None
+        if request.video_type == "sermon":
+             audio_path_local = base_dir / "audio.wav"
+             # analyze_prosody expects file path
+             rhetorical_peaks = analyze_prosody(str(audio_path_local))
 
-        # Identify moments for clips
-        print(f"Identifying clip moments (Mode: {request.video_type})")
-        identified_moments_raw = self.identify_moments(transcript_segments, mode=request.video_type)
+        print("Identifying viral moments with Gemini...")
+        identified_moments_raw = self.identify_moments(
+            transcript_segments, 
+            mode=request.video_type,
+            rhetorical_peaks=rhetorical_peaks
+        )
 
         cleaned_json_string = identified_moments_raw.strip()
         
@@ -824,6 +1198,7 @@ The transcript is as follows:
                 process_clip(
                     base_dir, video_path, s3_key,
                     moment["start"], moment["end"], index, transcript_segments,
+                    video_type=request.video_type,
                     caption_effect=request.caption_effect,
                     caption_font=request.caption_font,
                     caption_font_size=request.caption_font_size,
