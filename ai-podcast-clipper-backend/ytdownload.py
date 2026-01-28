@@ -5,11 +5,14 @@ import os
 url = "https://www.youtube.com/watch?v=SOG0GmKts_I"
 url2 = "https://www.youtube.com/live/-fs1SmF1cJA?si=zLblivwcXkMf-FNl"
 
-yt = YouTube(url, on_progress_callback=on_progress)
+yt = YouTube(url2, on_progress_callback=on_progress)
 print(yt.title)
 
-ys = yt.streams.get_highest_resolution()
-ys.download()
+# ys = yt.streams.get_highest_resolution()
+subtitles = yt.captions['a.en']
+subtitles.save_captions('captions1.txt')
+# ys.download()
+
 # video_stream = yt.streams.filter(
 #     res="1080p", file_extension="mp4", only_video=True).first()
 # audio_stream = yt.streams.filter(

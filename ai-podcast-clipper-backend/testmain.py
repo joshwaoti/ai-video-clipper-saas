@@ -1,3 +1,4 @@
+
 import glob
 import json
 import pathlib
@@ -6,6 +7,7 @@ import shutil
 import subprocess
 import time
 import uuid
+import re
 import boto3
 import cv2
 from fastapi import Depends, HTTPException, status
@@ -16,6 +18,7 @@ import numpy as np
 from pydantic import BaseModel
 import os
 from google import genai
+from pytubefix import YouTube
 
 import pysubs2
 from tqdm import tqdm
@@ -23,19 +26,22 @@ import whisperx
 
 
 class ProcessVideoRequest(BaseModel):
-    s3_key: str
+    s3_key: str = None
+    youtube_url: str = None
+    video_type: str = "podcast"  # "podcast", "sermon", "presentation"
 
 
 image = (modal.Image.from_registry(
-    "nvidia/cuda:12.4.0-devel-ubuntu22.04", add_python="3.10")
-    .apt_install(["ffmpeg", "libgl1-mesa-glx", "wget", "libcudnn8", "libcudnn8-dev", "pkg-config", "git", "libavfilter-dev", "libavformat-dev", "libavcodec-dev", "libavdevice-dev", "libavutil-dev", "libswscale-dev", "libswresample-dev"])
+    "nvidia/cuda:12.4.0-devel-ubuntu22.04", add_python="3.12")
+    .apt_install(["ffmpeg", "libgl1-mesa-glx", "wget", "libcudnn8", "libcudnn8-dev"])
     .pip_install_from_requirements("requirements.txt")
+    .pip_install("pytubefix", "pysubs2")
     .run_commands(["mkdir -p /usr/share/fonts/truetype/custom",
                    "wget -O /usr/share/fonts/truetype/custom/Anton-Regular.ttf https://github.com/google/fonts/raw/main/ofl/anton/Anton-Regular.ttf",
                    "fc-cache -f -v"])
-    .add_local_dir("asd", "/asd", copy=True, ignore=[".git", "**/.git"]))
+    .add_local_dir("asd", "/asd", copy=True))
 
-app = modal.App("ai-podcast-clipper", image=image)
+app = modal.App("ai-podcast-clipper-v2", image=image)
 
 volume = modal.Volume.from_name(
     "ai-podcast-clipper-model-cache", create_if_missing=True
@@ -304,10 +310,48 @@ def process_clip(base_dir: str, original_video_path: str, s3_key: str, start_tim
         subtitle_output_path, "josh-video-clipper", output_s3_key)
 
 
+def parse_youtube_subtitles(srt_content: str):
+    """
+    Parses SRT content strings into word-level segments with interpolated timing.
+    Returns: [{"start": float, "end": float, "word": str}, ...]
+    """
+    subs = pysubs2.SSAFile.from_string(srt_content)
+    segments = []
+
+    for event in subs:
+        # Pysubs2 times are in milliseconds
+        start_sec = event.start / 1000.0
+        end_sec = event.end / 1000.0
+        duration = end_sec - start_sec
+        
+        # Clean text
+        text = event.text.replace("\\N", " ").strip()
+        # Remove HTML-like tags if any
+        text = re.sub(r'<[^>]+>', '', text)
+        
+        words = text.split()
+        if not words:
+            continue
+            
+        word_duration = duration / len(words)
+        
+        for i, word in enumerate(words):
+            word_start = start_sec + (i * word_duration)
+            word_end = start_sec + ((i + 1) * word_duration)
+            segments.append({
+                "start": float(f"{word_start:.3f}"),
+                "end": float(f"{word_end:.3f}"),
+                "word": word
+            })
+            
+    return segments
+
+
 @app.cls(gpu="L40S", timeout=900, retries=0, scaledown_window=20, secrets=[modal.Secret.from_name("ai-podcast-clipper-secret")], volumes={mount_path: volume})
 class AiPodcastClipper:
     @modal.enter()
     def load_model(self):
+        # We still load WhisperX because we might need it for videos without subs
         self.whisperx_model = whisperx.load_model(
             "large-v2", device="cuda", compute_type="float16")
 
@@ -321,6 +365,49 @@ class AiPodcastClipper:
         print("Creating gemini client...")
         self.gemini_client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
         print("Created gemini client...")
+        
+    def download_from_youtube(self, youtube_url: str, base_dir: pathlib.Path):
+        """
+        Downloads video and subtitles from YouTube.
+        Returns: (s3_key, video_path, subtitle_content_or_none)
+        """
+        print(f"Downloading from YouTube: {youtube_url}")
+        yt = YouTube(youtube_url)
+        video_title_clean = re.sub(r'[\\/*?:"<>|]', "", yt.title).replace(" ", "_")
+        
+        # Download Video
+        # We try to get 1080p, else highest
+        stream = yt.streams.filter(res="1080p", file_extension="mp4").first()
+        if not stream:
+            stream = yt.streams.get_highest_resolution()
+        
+        video_filename = f"{video_title_clean}.mp4"
+        video_path = base_dir / video_filename
+        stream.download(output_path=str(base_dir), filename=video_filename)
+        print(f"Video downloaded to {video_path}")
+        
+        # Upload to S3 immediately to maintain existing workflow assumption
+        s3_key = f"youtube_downloads/{video_filename}"
+        s3_client = boto3.client("s3")
+        s3_client.upload_file(str(video_path), "josh-video-clipper", s3_key)
+        print(f"Uploaded to S3: {s3_key}")
+
+        # Download Captions
+        subtitle_content = None
+        # Try to get english captions
+        caption = None
+        if 'a.en' in yt.captions:
+            caption = yt.captions['a.en']
+        elif 'en' in yt.captions:
+            caption = yt.captions['en']
+            
+        if caption:
+            print("Found YouTube subtitles.")
+            subtitle_content = caption.generate_srt_captions()
+        else:
+            print("No English subtitles found on YouTube.")
+            
+        return s3_key, video_path, subtitle_content
 
     def transcribe_video(self, base_dir: str, video_path: str) -> str:
         audio_path = base_dir / "audio.wav"
@@ -345,15 +432,11 @@ class AiPodcastClipper:
 
         duration = time.time() - start_time
         print("Transcription and alignment took " + str(duration) + " seconds")
-        
-        
 
         segments = []
 
         if "word_segments" in result:
             for word_segment in result["word_segments"]:
-                if "start" not in word_segment or "end" not in word_segment:
-                    continue
                 segments.append({
                     "start": word_segment["start"],
                     "end": word_segment["end"],
@@ -362,8 +445,39 @@ class AiPodcastClipper:
 
         return json.dumps(segments)
 
-    def identify_moments(self, transcript: dict):
-        response = self.gemini_client.models.generate_content(model="gemini-2.0-flash-exp", contents="""
+    def identify_moments(self, transcript: dict, mode: str = "podcast"):
+        base_prompt = ""
+        
+        if mode == "sermon":
+            base_prompt = """
+    This is a sermon video transcript consisting of words, along with each word's start and end time. I am looking to create clips between a minimum of 30 and maximum of 60 seconds long, should not be less than 30 seconds. The clip should never exceed 60 seconds.
+
+    Your task is to find and extract high-engagement segments. Specifically, look for:
+    1. "Aha" Moments: Profound, standalone theological insights or "mic drop" quotes.
+    2. Illustrations: Brief stories or metaphors that explain a concept.
+    3. Relatable Struggles: Segments where the speaker validates a common human emotion (anxiety, fear, doubt) and provides a spiritual perspective on it.
+
+    Each clip must follow a "Hook and Payoff" structure:
+    - The clip must start with a clear premise, problem, or statement (The Hook).
+    - The clip must end with the resolution, lesson, or concluding thought (The Payoff).
+    - It is acceptable to include a preceding sentence if it is necessary to establish context.
+
+    Please adhere to the following rules:
+    - Ensure that clips do not overlap with one another.
+    - Start and end timestamps of the clips should align perfectly with the sentence boundaries in the transcript.
+    - Only use the start and end timestamps provided in the input. Modifying timestamps is not allowed.
+    - Format the output as a list of JSON objects, each representing a clip with 'start' and 'end' timestamps: [{"start": seconds, "end": seconds}, ...clip2, clip3]. The output should always be readable by the python json.loads function.
+    - Aim to generate longer clips between 40-60 seconds, and ensure the segment is grammatically complete and self-contained.
+
+    Avoid including:
+    - Housekeeping items (announcements, welcoming guests, asking people to sit/stand).
+    - Incomplete thoughts where the theological conclusion requires context outside the 60-second window.
+    - Prayer segments or scripture readings that lack the speaker's commentary.
+    - Interactions that are specific to the physical room (e.g., "Tell your neighbor...").
+    """
+        else:
+            # Default Podcast Prompt
+            base_prompt = """
     This is a podcast video transcript consisting of word, along with each words's start and end time. I am looking to create clips between a minimum of 30 and maximum of 60 seconds long, should not be less than 30 seconds. The clip should never exceed 60 seconds.
 
     Your task is to find and extract stories, or question and their corresponding answers from the transcript.
@@ -380,18 +494,19 @@ class AiPodcastClipper:
     Avoid including:
     - Moments of greeting, thanking, or saying goodbye.
     - Non-question and answer interactions.
+    """
 
-    If there are no valid clips to extract, the output should be an empty list [], in JSON format. Also readable by json.loads() in Python.
+        full_content = base_prompt + "\n\nIf there are no valid clips to extract, the output should be an empty list [], in JSON format. Also readable by json.loads() in Python.\n\n" + \
+                       "The transcript is as follows:\n\n" + str(transcript)
 
-    The transcript is as follows:\n\n""" + str(transcript))
-        print(f"Identified moments response: ${response.text}")
+        response = self.gemini_client.models.generate_content(
+            model="gemini-2.5-flash-preview-04-17", contents=full_content)
+        print(f"Identified moments response for mode {mode}")
         return response.text
 
     @modal.fastapi_endpoint(method="POST")
     def process_video(self, request: ProcessVideoRequest, token: HTTPAuthorizationCredentials = Depends(auth_scheme)):
         print("Processing video...")
-        
-        s3_key = request.s3_key
 
         if token.credentials != os.environ["AUTH_TOKEN"]:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
@@ -401,21 +516,34 @@ class AiPodcastClipper:
         base_dir = pathlib.Path("/tmp") / run_id
         base_dir.mkdir(parents=True, exist_ok=True)
 
-        # Download video file
-        video_path = base_dir / "input.mp4"
-        s3_client = boto3.client("s3")
-        s3_client.download_file("josh-video-clipper", s3_key, str(video_path))
+        video_path = None
+        s3_key = request.s3_key
+        subtitle_content = None
         
-        # self.transcribe_video(base_dir, video_path)
-        
+        # 0. Ingest (S3 or YouTube)
+        if request.youtube_url:
+            s3_key, video_path, subtitle_content = self.download_from_youtube(request.youtube_url, base_dir)
+        elif s3_key:
+             # Download video file from S3
+            video_path = base_dir / "input.mp4"
+            s3_client = boto3.client("s3")
+            s3_client.download_file("josh-video-clipper", s3_key, str(video_path))
+        else:
+            raise HTTPException(status_code=400, detail="Either s3_key or youtube_url must be provided")
 
-        # 1. Transcription
-        transcript_segments_json = self.transcribe_video(base_dir, video_path)
-        transcript_segments = json.loads(transcript_segments_json)
+        # 1. Transcription / Subtitle Parsing
+        transcript_segments = []
+        if subtitle_content:
+            print("Using existing YouTube subtitles (skipping WhisperX)...")
+            transcript_segments = parse_youtube_subtitles(subtitle_content)
+        else:
+            print("No subtitles provided, running WhisperX...")
+            transcript_segments_json = self.transcribe_video(base_dir, video_path)
+            transcript_segments = json.loads(transcript_segments_json)
 
         # 2. Identify moments for clips
-        print("Identifying clip moments")
-        identified_moments_raw = self.identify_moments(transcript_segments)
+        print(f"Identifying clip moments (Mode: {request.video_type})")
+        identified_moments_raw = self.identify_moments(transcript_segments, mode=request.video_type)
 
         cleaned_json_string = identified_moments_raw.strip()
         if cleaned_json_string.startswith("```json"):
@@ -441,27 +569,5 @@ class AiPodcastClipper:
         if base_dir.exists():
             print(f"Cleaning up temp dir after {base_dir}")
             shutil.rmtree(base_dir, ignore_errors=True)
-
-
-@app.local_entrypoint()
-def main():
-    import requests
-
-    ai_podcast_clipper = AiPodcastClipper()
-
-    url = ai_podcast_clipper.process_video.web_url
-
-    payload = {
-        "s3_key": "test1/mi65min.mp4"
-    }
-
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer 123123"
-    }
-
-    response = requests.post(url, json=payload,
-                             headers=headers)
-    response.raise_for_status()
-    result = response.json()
-    print(result)
+            
+        return {"status": "success", "s3_key": s3_key, "clips_created": len(clip_moments)}
